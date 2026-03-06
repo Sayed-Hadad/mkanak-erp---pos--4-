@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "postinstall": "node -e \"try { require('better-sqlite3') } catch(e) { console.log('SQLite loaded successfully') }\""
   },
   "keywords": ["erp", "pos", "inventory", "express", "api"],
   "author": "",
@@ -19,5 +20,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.4.1"
   }
 }
