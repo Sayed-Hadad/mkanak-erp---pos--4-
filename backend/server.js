@@ -107,7 +107,7 @@ await db.exec(`
     tax REAL,
     discount REAL,
     payment_method TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(branch_id) REFERENCES branches(id),
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(customer_id) REFERENCES customers(id)
@@ -129,7 +129,7 @@ await db.exec(`
     to_branch_id INTEGER,
     status TEXT DEFAULT 'pending',
     type TEXT DEFAULT 'send',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(from_branch_id) REFERENCES branches(id),
     FOREIGN KEY(to_branch_id) REFERENCES branches(id)
   );
@@ -150,7 +150,7 @@ await db.exec(`
     user_id INTEGER,
     total_return_amount REAL,
     reason TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(sale_id) REFERENCES sales(id),
     FOREIGN KEY(branch_id) REFERENCES branches(id),
     FOREIGN KEY(user_id) REFERENCES users(id)
@@ -173,7 +173,7 @@ await db.exec(`
     message TEXT NOT NULL,
     is_read INTEGER DEFAULT 0,
     type TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(branch_id) REFERENCES branches(id)
   );
 
