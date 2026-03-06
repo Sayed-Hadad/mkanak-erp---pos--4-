@@ -10,7 +10,15 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database(path.join(__dirname, "mkanak.db"));
+// Create data directory if it doesn't exist
+import { mkdirSync } from "fs";
+try {
+  mkdirSync(path.join(__dirname, "data"), { recursive: true });
+} catch (e) {
+  // Directory might already exist
+}
+
+const db = new Database(path.join(__dirname, "data", "mkanak.db"));
 
 // Initialize Database Schema
 db.exec(`
@@ -865,7 +873,30 @@ app.get("/api/reports/stats", (req, res) => {
   }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error', message: err.message });
+});
+
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Server URL: http://0.0.0.0:${PORT}`);
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    db.close();
+    process.exit(0);
+  });
 });
