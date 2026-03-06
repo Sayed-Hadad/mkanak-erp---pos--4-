@@ -234,9 +234,9 @@ app.use(express.json());
 console.log("🛣️  Setting up API routes...");
 
 // API Routes
-app.get("/api/health", (req, res) => {
+app.get("/api/health", async (req, res) => {
   console.log("❤️  Health check requested");
-  const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
+  const userCount = await db.prepare("SELECT COUNT(*) as count FROM users").get();
   res.json({ 
     status: "ok", 
     message: "Mkanak ERP Server is running",
@@ -245,29 +245,29 @@ app.get("/api/health", (req, res) => {
 });
 
 // Seed endpoint - Only for initial setup
-app.post("/api/seed", (req, res) => {
+app.post("/api/seed", async (req, res) => {
   try {
-    const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
+    const userCount = await db.prepare("SELECT COUNT(*) as count FROM users").get();
     
     if (userCount.count > 0) {
       return res.status(400).json({ error: "Database already seeded" });
     }
 
     console.log("Manual seeding triggered...");
-    const mainBranch = db.prepare("INSERT INTO branches (name, is_main) VALUES (?, ?)").run("Main Warehouse", 1);
-    db.prepare("INSERT INTO branches (name) VALUES (?)").run("Branch 1");
-    db.prepare("INSERT INTO users (username, password, role, branch_id) VALUES (?, ?, ?, ?)").run("admin", "admin123", "super_admin", mainBranch.lastInsertRowid);
-    db.prepare("INSERT INTO categories (name) VALUES (?)").run("General");
+    const mainBranch = await db.prepare("INSERT INTO branches (name, is_main) VALUES (?, ?)").run("Main Warehouse", 1);
+    await db.prepare("INSERT INTO branches (name) VALUES (?)").run("Branch 1");
+    await db.prepare("INSERT INTO users (username, password, role, branch_id) VALUES (?, ?, ?, ?)").run("admin", "admin123", "super_admin", mainBranch.lastInsertRowid);
+    await db.prepare("INSERT INTO categories (name) VALUES (?)").run("General");
     
     // Add some products
-    const p1 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("كتاب تعلم البرمجة", "1001", 1, 150, 100, 5);
-    const p2 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("رواية الخيال", "1002", 1, 80, 50, 10);
-    const p3 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("دفتر ملاحظات", "1003", 1, 25, 10, 20);
+    const p1 = await db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("كتاب تعلم البرمجة", "1001", 1, 150, 100, 5);
+    const p2 = await db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("رواية الخيال", "1002", 1, 80, 50, 10);
+    const p3 = await db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("دفتر ملاحظات", "1003", 1, 25, 10, 20);
 
     // Add inventory for main branch
-    db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p1.lastInsertRowid, 1, 50);
-    db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p2.lastInsertRowid, 1, 30);
-    db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p3.lastInsertRowid, 1, 100);
+    await db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p1.lastInsertRowid, 1, 50);
+    await db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p2.lastInsertRowid, 1, 30);
+    await db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p3.lastInsertRowid, 1, 100);
 
     console.log("Manual seeding complete!");
     res.json({ success: true, message: "Database seeded successfully. Login with admin/admin123" });
@@ -287,21 +287,21 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-app.get("/api/dashboard/stats", (req, res) => {
+app.get("/api/dashboard/stats", async (req, res) => {
   const stats = {
-    totalSales: db.prepare("SELECT SUM(total_amount) as total FROM sales").get(),
-    totalRevenue: db.prepare("SELECT SUM(total_amount) as total FROM sales WHERE created_at >= date('now')").get(),
-    lowStock: db.prepare("SELECT COUNT(*) as count FROM inventory i JOIN products p ON i.product_id = p.id WHERE i.quantity <= p.min_stock").get(),
-    branchSales: db.prepare("SELECT b.name, SUM(s.total_amount) as total FROM branches b LEFT JOIN sales s ON b.id = s.branch_id GROUP BY b.id").all()
+    totalSales: await db.prepare("SELECT SUM(total_amount) as total FROM sales").get(),
+    totalRevenue: await db.prepare("SELECT SUM(total_amount) as total FROM sales WHERE created_at >= date('now')").get(),
+    lowStock: await db.prepare("SELECT COUNT(*) as count FROM inventory i JOIN products p ON i.product_id = p.id WHERE i.quantity <= p.min_stock").get(),
+    branchSales: await db.prepare("SELECT b.name, SUM(s.total_amount) as total FROM branches b LEFT JOIN sales s ON b.id = s.branch_id GROUP BY b.id").all()
   };
   res.json(stats);
 });
 
-app.get("/api/products", (req, res) => {
+app.get("/api/products", async (req, res) => {
   const { branch_id } = req.query;
   
   if (branch_id) {
-    const products = db.prepare(`
+    const products = await db.prepare(`
       SELECT p.*, c.name as category_name, COALESCE(i.quantity, 0) as stock
       FROM products p 
       LEFT JOIN categories c ON p.category_id = c.id 
@@ -310,7 +310,7 @@ app.get("/api/products", (req, res) => {
     `).all(branch_id);
     res.json(products);
   } else {
-    const products = db.prepare(`
+    const products = await db.prepare(`
       SELECT p.*, c.name as category_name, SUM(COALESCE(i.quantity, 0)) as stock
       FROM products p 
       LEFT JOIN categories c ON p.category_id = c.id 
@@ -321,9 +321,9 @@ app.get("/api/products", (req, res) => {
   }
 });
 
-app.get("/api/products/:id/stock", (req, res) => {
+app.get("/api/products/:id/stock", async (req, res) => {
   const { id } = req.params;
-  const stock = db.prepare(`
+  const stock = await db.prepare(`
     SELECT b.name as branch_name, COALESCE(i.quantity, 0) as quantity
     FROM branches b
     LEFT JOIN inventory i ON b.id = i.branch_id AND i.product_id = ?
@@ -332,7 +332,7 @@ app.get("/api/products/:id/stock", (req, res) => {
   res.json(stock);
 });
 
-app.post("/api/products", (req, res) => {
+app.post("/api/products", async (req, res) => {
   const { name, barcode, category_id, price, cost, min_stock, initial_stock, branch_id } = req.body;
   try {
     const transaction = db.transaction(() => {
@@ -353,19 +353,19 @@ app.post("/api/products", (req, res) => {
       return productId;
     });
 
-    const productId = transaction();
+    const productId = await transaction();
     res.json({ success: true, productId });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.get("/api/categories", (req, res) => {
-  const categories = db.prepare("SELECT * FROM categories").all();
+app.get("/api/categories", async (req, res) => {
+  const categories = await db.prepare("SELECT * FROM categories").all();
   res.json(categories);
 });
 
-app.get("/api/inventory", (req, res) => {
+app.get("/api/inventory", async (req, res) => {
   const { branch_id } = req.query;
   let query = `
     SELECT p.id as product_id, p.name as product_name, b.id as branch_id, b.name as branch_name, i.quantity 
@@ -376,15 +376,15 @@ app.get("/api/inventory", (req, res) => {
   
   if (branch_id) {
     query += " WHERE i.branch_id = ?";
-    const inventory = db.prepare(query).all(branch_id);
+    const inventory = await db.prepare(query).all(branch_id);
     res.json(inventory);
   } else {
-    const inventory = db.prepare(query).all();
+    const inventory = await db.prepare(query).all();
     res.json(inventory);
   }
 });
 
-app.get("/api/transfers", (req, res) => {
+app.get("/api/transfers", async (req, res) => {
   const { branch_id } = req.query;
   let query = `
     SELECT t.*, fb.name as from_branch_name, tb.name as to_branch_name 
@@ -395,17 +395,17 @@ app.get("/api/transfers", (req, res) => {
   
   if (branch_id) {
     query += " WHERE t.from_branch_id = ? OR t.to_branch_id = ?";
-    const transfers = db.prepare(query + " ORDER BY t.created_at DESC").all(branch_id, branch_id);
+    const transfers = await db.prepare(query + " ORDER BY t.created_at DESC").all(branch_id, branch_id);
     res.json(transfers);
   } else {
-    const transfers = db.prepare(query + " ORDER BY t.created_at DESC").all();
+    const transfers = await db.prepare(query + " ORDER BY t.created_at DESC").all();
     res.json(transfers);
   }
 });
 
-app.get("/api/transfers/:id", (req, res) => {
+app.get("/api/transfers/:id", async (req, res) => {
   const { id } = req.params;
-  const transfer = db.prepare(`
+  const transfer = await db.prepare(`
     SELECT t.*, fb.name as from_branch_name, tb.name as to_branch_name 
     FROM transfers t
     JOIN branches fb ON t.from_branch_id = fb.id
@@ -415,7 +415,7 @@ app.get("/api/transfers/:id", (req, res) => {
   
   if (!transfer) return res.status(404).json({ error: "Transfer not found" });
   
-  const items = db.prepare(`
+  const items = await db.prepare(`
     SELECT ti.*, p.name as product_name, p.barcode
     FROM transfer_items ti
     JOIN products p ON ti.product_id = p.id
@@ -425,7 +425,7 @@ app.get("/api/transfers/:id", (req, res) => {
   res.json({ ...transfer, items });
 });
 
-app.post("/api/transfers", (req, res) => {
+app.post("/api/transfers", async (req, res) => {
   const { from_branch_id, to_branch_id, items, type = 'send' } = req.body;
   
   if (!from_branch_id || !to_branch_id || !items || items.length === 0) {
@@ -465,7 +465,7 @@ app.post("/api/transfers", (req, res) => {
       return transferId;
     });
 
-    transaction();
+    await transaction();
     res.json({ success: true });
   } catch (error) {
     console.error("Error creating transfer:", error);
@@ -473,7 +473,7 @@ app.post("/api/transfers", (req, res) => {
   }
 });
 
-app.post("/api/transfers/:id/accept", (req, res) => {
+app.post("/api/transfers/:id/accept", async (req, res) => {
   const { id } = req.params;
   try {
     const transaction = db.transaction(() => {
@@ -537,7 +537,7 @@ app.post("/api/transfers/:id/accept", (req, res) => {
       return true;
     });
 
-    transaction();
+    await transaction();
     res.json({ success: true });
   } catch (error) {
     console.error("Error accepting transfer:", error);
@@ -545,18 +545,18 @@ app.post("/api/transfers/:id/accept", (req, res) => {
   }
 });
 
-app.post("/api/transfers/:id/reject", (req, res) => {
+app.post("/api/transfers/:id/reject", async (req, res) => {
   const { id } = req.params;
   try {
-    db.prepare("UPDATE transfers SET status = 'rejected' WHERE id = ?").run(id);
+    await db.prepare("UPDATE transfers SET status = 'rejected' WHERE id = ?").run(id);
     
-    const transfer = db.prepare("SELECT * FROM transfers WHERE id = ?").get(id);
+    const transfer = await db.prepare("SELECT * FROM transfers WHERE id = ?").get(id);
     const notifiedBranchId = transfer.type === 'send' ? transfer.from_branch_id : transfer.to_branch_id;
     const rejectorBranchId = transfer.type === 'send' ? transfer.to_branch_id : transfer.from_branch_id;
     
-    const rejectorBranch = db.prepare("SELECT name FROM branches WHERE id = ?").get(rejectorBranchId);
+    const rejectorBranch = await db.prepare("SELECT name FROM branches WHERE id = ?").get(rejectorBranchId);
     
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO notifications (branch_id, title, message, type)
       VALUES (?, ?, ?, ?)
     `).run(
@@ -572,11 +572,11 @@ app.post("/api/transfers/:id/reject", (req, res) => {
   }
 });
 
-app.get("/api/notifications", (req, res) => {
+app.get("/api/notifications", async (req, res) => {
   const { branch_id } = req.query;
   if (!branch_id) return res.status(400).json({ error: "branch_id required" });
   
-  const notifications = db.prepare(`
+  const notifications = await db.prepare(`
     SELECT * FROM notifications 
     WHERE branch_id = ? 
     ORDER BY created_at DESC 
@@ -585,18 +585,18 @@ app.get("/api/notifications", (req, res) => {
   res.json(notifications);
 });
 
-app.put("/api/notifications/:id/read", (req, res) => {
+app.put("/api/notifications/:id/read", async (req, res) => {
   const { id } = req.params;
-  db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
+  await db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
   res.json({ success: true });
 });
 
-app.get("/api/messages", (req, res) => {
+app.get("/api/messages", async (req, res) => {
   const { branch_id } = req.query;
   if (!branch_id) return res.status(400).json({ error: "branch_id required" });
 
   try {
-    const messages = db.prepare(`
+    const messages = await db.prepare(`
       SELECT m.*, fb.name as from_branch_name, u.username as from_username
       FROM messages m
       JOIN branches fb ON m.from_branch_id = fb.id
@@ -610,20 +610,20 @@ app.get("/api/messages", (req, res) => {
   }
 });
 
-app.post("/api/messages", (req, res) => {
+app.post("/api/messages", async (req, res) => {
   const { from_branch_id, to_branch_id, from_user_id, message } = req.body;
   if (!from_branch_id || !to_branch_id || !from_user_id || !message) {
     return res.status(400).json({ error: "بيانات الرسالة غير مكتملة" });
   }
 
   try {
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO messages (from_branch_id, to_branch_id, from_user_id, message)
       VALUES (?, ?, ?, ?)
     `).run(from_branch_id, to_branch_id, from_user_id, message);
 
-    const fromBranch = db.prepare("SELECT name FROM branches WHERE id = ?").get(from_branch_id);
-    db.prepare(`
+    const fromBranch = await db.prepare("SELECT name FROM branches WHERE id = ?").get(from_branch_id);
+    await db.prepare(`
       INSERT INTO notifications (branch_id, title, message, type)
       VALUES (?, ?, ?, ?)
     `).run(to_branch_id, "رسالة جديدة", `وصلتك رسالة جديدة من فرع ${fromBranch.name}`, "message");
@@ -634,12 +634,12 @@ app.post("/api/messages", (req, res) => {
   }
 });
 
-app.get("/api/branches", (req, res) => {
-  const branches = db.prepare("SELECT * FROM branches").all();
+app.get("/api/branches", async (req, res) => {
+  const branches = await db.prepare("SELECT * FROM branches").all();
   res.json(branches);
 });
 
-app.post("/api/branches", (req, res) => {
+app.post("/api/branches", async (req, res) => {
   const { name, location, username, password } = req.body;
   
   try {
@@ -658,51 +658,51 @@ app.post("/api/branches", (req, res) => {
       return branchId;
     });
 
-    const branchId = transaction();
+    const branchId = await transaction();
     res.json({ success: true, branchId });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.put("/api/branches/:id", (req, res) => {
+app.put("/api/branches/:id", async (req, res) => {
   const { id } = req.params;
   const { name, location } = req.body;
   try {
-    db.prepare("UPDATE branches SET name = ?, location = ? WHERE id = ?").run(name, location, id);
+    await db.prepare("UPDATE branches SET name = ?, location = ? WHERE id = ?").run(name, location, id);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.delete("/api/branches/:id", (req, res) => {
+app.delete("/api/branches/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    db.prepare("DELETE FROM users WHERE branch_id = ?").run(id);
-    db.prepare("DELETE FROM branches WHERE id = ?").run(id);
+    await db.prepare("DELETE FROM users WHERE branch_id = ?").run(id);
+    await db.prepare("DELETE FROM branches WHERE id = ?").run(id);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.delete("/api/products/:id", (req, res) => {
+app.delete("/api/products/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    db.prepare("DELETE FROM inventory WHERE product_id = ?").run(id);
-    db.prepare("DELETE FROM products WHERE id = ?").run(id);
+    await db.prepare("DELETE FROM inventory WHERE product_id = ?").run(id);
+    await db.prepare("DELETE FROM products WHERE id = ?").run(id);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.put("/api/products/:id", (req, res) => {
+app.put("/api/products/:id", async (req, res) => {
   const { id } = req.params;
   const { name, barcode, category_id, price, cost, min_stock } = req.body;
   try {
-    db.prepare(`
+    await db.prepare(`
       UPDATE products 
       SET name = ?, barcode = ?, category_id = ?, price = ?, cost = ?, min_stock = ? 
       WHERE id = ?
@@ -713,7 +713,7 @@ app.put("/api/products/:id", (req, res) => {
   }
 });
 
-app.post("/api/sales", (req, res) => {
+app.post("/api/sales", async (req, res) => {
   const { branch_id, user_id, customer_id, total_amount, tax, discount, payment_method, items } = req.body;
   
   if (!customer_id) {
@@ -743,35 +743,35 @@ app.post("/api/sales", (req, res) => {
       return saleId;
     });
 
-    const saleId = transaction();
+    const saleId = await transaction();
     res.json({ success: true, saleId });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.post("/api/customers", (req, res) => {
+app.post("/api/customers", async (req, res) => {
   const { name, phone } = req.body;
   try {
-    const result = db.prepare("INSERT INTO customers (name, phone) VALUES (?, ?)").run(name, phone);
+    const result = await db.prepare("INSERT INTO customers (name, phone) VALUES (?, ?)").run(name, phone);
     res.json({ success: true, id: result.lastInsertRowid });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.get("/api/customers", (req, res) => {
+app.get("/api/customers", async (req, res) => {
   try {
-    const customers = db.prepare("SELECT * FROM customers").all();
+    const customers = await db.prepare("SELECT * FROM customers").all();
     res.json(customers);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.get("/api/sales", (req, res) => {
+app.get("/api/sales", async (req, res) => {
   try {
-    const sales = db.prepare(`
+    const sales = await db.prepare(`
       SELECT s.*, c.name as customer_name, b.name as branch_name, u.username 
       FROM sales s
       LEFT JOIN customers c ON s.customer_id = c.id
@@ -786,10 +786,10 @@ app.get("/api/sales", (req, res) => {
   }
 });
 
-app.get("/api/sales/:id", (req, res) => {
+app.get("/api/sales/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const sale = db.prepare(`
+    const sale = await db.prepare(`
       SELECT s.*, c.name as customer_name, c.phone as customer_phone, b.name as branch_name, u.username 
       FROM sales s
       LEFT JOIN customers c ON s.customer_id = c.id
@@ -802,14 +802,14 @@ app.get("/api/sales/:id", (req, res) => {
       return res.status(404).json({ error: "الفاتورة غير موجودة" });
     }
 
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT si.*, p.name as product_name, p.barcode
       FROM sale_items si
       JOIN products p ON si.product_id = p.id
       WHERE si.sale_id = ?
     `).all(id);
 
-    const returnedItems = db.prepare(`
+    const returnedItems = await db.prepare(`
       SELECT ri.product_id, SUM(ri.quantity) as returned_qty
       FROM return_items ri
       JOIN returns r ON ri.return_id = r.id
@@ -831,7 +831,7 @@ app.get("/api/sales/:id", (req, res) => {
   }
 });
 
-app.post("/api/returns", (req, res) => {
+app.post("/api/returns", async (req, res) => {
   const { sale_id, branch_id, user_id, total_return_amount, reason, items } = req.body;
   
   try {
@@ -857,16 +857,16 @@ app.post("/api/returns", (req, res) => {
       return returnId;
     });
 
-    const returnId = transaction();
+    const returnId = await transaction();
     res.json({ success: true, returnId });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.get("/api/returns", (req, res) => {
+app.get("/api/returns", async (req, res) => {
   try {
-    const returns = db.prepare(`
+    const returns = await db.prepare(`
       SELECT r.*, s.id as sale_id, b.name as branch_name, u.username 
       FROM returns r
       JOIN sales s ON r.sale_id = s.id
@@ -880,13 +880,13 @@ app.get("/api/returns", (req, res) => {
   }
 });
 
-app.get("/api/reports/stats", (req, res) => {
+app.get("/api/reports/stats", async (req, res) => {
   try {
-    const totalSales = db.prepare("SELECT SUM(total_amount) as total FROM sales").get();
-    const totalTax = db.prepare("SELECT SUM(tax) as total FROM sales").get();
-    const totalOrders = db.prepare("SELECT COUNT(*) as count FROM sales").get();
+    const totalSales = await db.prepare("SELECT SUM(total_amount) as total FROM sales").get();
+    const totalTax = await db.prepare("SELECT SUM(tax) as total FROM sales").get();
+    const totalOrders = await db.prepare("SELECT COUNT(*) as count FROM sales").get();
     
-    const topProducts = db.prepare(`
+    const topProducts = await db.prepare(`
       SELECT p.name, SUM(si.quantity) as qty
       FROM sale_items si
       JOIN products p ON si.product_id = p.id
@@ -895,7 +895,7 @@ app.get("/api/reports/stats", (req, res) => {
       LIMIT 5
     `).all();
 
-    const dailySales = db.prepare(`
+    const dailySales = await db.prepare(`
       SELECT strftime('%Y-%m-%d', created_at) as date, SUM(total_amount) as sales
       FROM sales
       GROUP BY date
@@ -903,7 +903,7 @@ app.get("/api/reports/stats", (req, res) => {
       LIMIT 7
     `).all();
 
-    const salesByCategory = db.prepare(`
+    const salesByCategory = await db.prepare(`
       SELECT c.name, SUM(si.quantity * si.price) as total
       FROM sale_items si
       JOIN products p ON si.product_id = p.id
