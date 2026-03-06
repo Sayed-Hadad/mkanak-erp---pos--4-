@@ -17,12 +17,22 @@ const __dirname = path.dirname(__filename);
 
 // PostgreSQL connection
 const { Pool } = pg;
+
+// Check if DATABASE_URL is set
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL environment variable is not set!");
+  console.error("Please set DATABASE_URL in Railway or your .env file");
+  process.exit(1);
+}
+
+console.log("💾 Connecting to PostgreSQL...");
+console.log("📍 Database URL starts with:", process.env.DATABASE_URL.substring(0, 20) + "...");
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-console.log("💾 Connecting to PostgreSQL...");
 let db;
 try {
   // Test connection
