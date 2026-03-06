@@ -247,6 +247,39 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Mkanak ERP Server is running" });
 });
 
+// Seed endpoint - Only for initial setup
+app.post("/api/seed", (req, res) => {
+  try {
+    const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
+    
+    if (userCount.count > 0) {
+      return res.status(400).json({ error: "Database already seeded" });
+    }
+
+    console.log("Manual seeding triggered...");
+    const mainBranch = db.prepare("INSERT INTO branches (name, is_main) VALUES (?, ?)").run("Main Warehouse", 1);
+    db.prepare("INSERT INTO branches (name) VALUES (?)").run("Branch 1");
+    db.prepare("INSERT INTO users (username, password, role, branch_id) VALUES (?, ?, ?, ?)").run("admin", "admin123", "super_admin", mainBranch.lastInsertRowid);
+    db.prepare("INSERT INTO categories (name) VALUES (?)").run("General");
+    
+    // Add some products
+    const p1 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("كتاب تعلم البرمجة", "1001", 1, 150, 100, 5);
+    const p2 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("رواية الخيال", "1002", 1, 80, 50, 10);
+    const p3 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("دفتر ملاحظات", "1003", 1, 25, 10, 20);
+
+    // Add inventory for main branch
+    db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p1.lastInsertRowid, 1, 50);
+    db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p2.lastInsertRowid, 1, 30);
+    db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p3.lastInsertRowid, 1, 100);
+
+    console.log("Manual seeding complete!");
+    res.json({ success: true, message: "Database seeded successfully. Login with admin/admin123" });
+  } catch (error) {
+    console.error("Seeding error:", error);
+    res.status(500).json({ error: "Seeding failed: " + error.message });
+  }
+});
+
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body;
   const user = db.prepare("SELECT u.*, b.name as branch_name FROM users u LEFT JOIN branches b ON u.branch_id = b.id WHERE username = ? AND password = ?").get(username, password);
