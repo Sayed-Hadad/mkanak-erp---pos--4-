@@ -345,8 +345,8 @@ app.get("/api/products/:id/stock", async (req, res) => {
 app.post("/api/products", async (req, res) => {
   const { name, barcode, category_id, price, cost, min_stock, initial_stock, branch_id } = req.body;
   try {
-    const transaction = db.transaction(() => {
-      const productResult = db.prepare(`
+    const transaction = db.transaction(async (db) => {
+      const productResult = await db.prepare(`
         INSERT INTO products (name, barcode, category_id, price, cost, min_stock) 
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(name, barcode, category_id, price, cost, min_stock);
@@ -354,7 +354,7 @@ app.post("/api/products", async (req, res) => {
       const productId = productResult.lastInsertRowid;
       
       if (initial_stock > 0 && branch_id) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO inventory (product_id, branch_id, quantity) 
           VALUES (?, ?, ?)
         `).run(productId, branch_id, initial_stock);
@@ -443,8 +443,8 @@ app.post("/api/transfers", async (req, res) => {
   }
 
   try {
-    const transaction = db.transaction(() => {
-      const transferResult = db.prepare(`
+    const transaction = db.transaction(async (db) => {
+      const transferResult = await db.prepare(`
         INSERT INTO transfers (from_branch_id, to_branch_id, status, type) 
         VALUES (?, ?, 'pending', ?)
       `).run(from_branch_id, to_branch_id, type);
@@ -452,7 +452,7 @@ app.post("/api/transfers", async (req, res) => {
       const transferId = transferResult.lastInsertRowid;
       
       for (const item of items) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO transfer_items (transfer_id, product_id, quantity) 
           VALUES (?, ?, ?)
         `).run(transferId, item.product_id, item.quantity);
@@ -461,13 +461,13 @@ app.post("/api/transfers", async (req, res) => {
       const notifiedBranchId = type === 'send' ? to_branch_id : from_branch_id;
       const creatorBranchId = type === 'send' ? from_branch_id : to_branch_id;
 
-      const creatorBranch = db.prepare("SELECT name FROM branches WHERE id = ?").get(creatorBranchId);
+      const creatorBranch = await db.prepare("SELECT name FROM branches WHERE id = ?").get(creatorBranchId);
       const title = type === 'send' ? "طلب تحويل وارد" : "طلب تزويد مخزني";
       const message = type === 'send' 
         ? `وصلك طلب تحويل مخزني جديد من ${creatorBranch.name}`
         : `يطلب منك ${creatorBranch.name} تزويده بمنتجات من مخزنك`;
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO notifications (branch_id, title, message, type)
         VALUES (?, ?, ?, ?)
       `).run(notifiedBranchId, title, message, "transfer");
@@ -486,55 +486,55 @@ app.post("/api/transfers", async (req, res) => {
 app.post("/api/transfers/:id/accept", async (req, res) => {
   const { id } = req.params;
   try {
-    const transaction = db.transaction(() => {
-      const transfer = db.prepare("SELECT * FROM transfers WHERE id = ?").get(id);
+    const transaction = db.transaction(async (db) => {
+      const transfer = await db.prepare("SELECT * FROM transfers WHERE id = ?").get(id);
       if (!transfer || transfer.status !== 'pending') {
         throw new Error("Invalid transfer or already processed");
       }
 
-      const items = db.prepare("SELECT * FROM transfer_items WHERE transfer_id = ?").all(id);
+      const items = await db.prepare("SELECT * FROM transfer_items WHERE transfer_id = ?").all(id);
       
       for (const item of items) {
-        const sourceStock = db.prepare(`
+        const sourceStock = await db.prepare(`
           SELECT id, quantity FROM inventory WHERE product_id = ? AND branch_id = ?
         `).get(item.product_id, transfer.from_branch_id);
 
         if (sourceStock) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE inventory SET quantity = quantity - ? 
             WHERE id = ?
           `).run(item.quantity, sourceStock.id);
         } else {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO inventory (product_id, branch_id, quantity) 
             VALUES (?, ?, ?)
           `).run(item.product_id, transfer.from_branch_id, -item.quantity);
         }
         
-        const destStock = db.prepare(`
+        const destStock = await db.prepare(`
           SELECT id FROM inventory WHERE product_id = ? AND branch_id = ?
         `).get(item.product_id, transfer.to_branch_id);
         
         if (destStock) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE inventory SET quantity = quantity + ? 
             WHERE id = ?
           `).run(item.quantity, destStock.id);
         } else {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO inventory (product_id, branch_id, quantity) 
             VALUES (?, ?, ?)
           `).run(item.product_id, transfer.to_branch_id, item.quantity);
         }
       }
 
-      db.prepare("UPDATE transfers SET status = 'completed' WHERE id = ?").run(id);
+      await db.prepare("UPDATE transfers SET status = 'completed' WHERE id = ?").run(id);
       
       const notifiedBranchId = transfer.type === 'send' ? transfer.from_branch_id : transfer.to_branch_id;
       const acceptorBranchId = transfer.type === 'send' ? transfer.to_branch_id : transfer.from_branch_id;
 
-      const acceptorBranch = db.prepare("SELECT name FROM branches WHERE id = ?").get(acceptorBranchId);
-      db.prepare(`
+      const acceptorBranch = await db.prepare("SELECT name FROM branches WHERE id = ?").get(acceptorBranchId);
+      await db.prepare(`
         INSERT INTO notifications (branch_id, title, message, type)
         VALUES (?, ?, ?, ?)
       `).run(
@@ -653,12 +653,12 @@ app.post("/api/branches", async (req, res) => {
   const { name, location, username, password } = req.body;
   
   try {
-    const transaction = db.transaction(() => {
-      const branchResult = db.prepare("INSERT INTO branches (name, location) VALUES (?, ?)").run(name, location);
+    const transaction = db.transaction(async (db) => {
+      const branchResult = await db.prepare("INSERT INTO branches (name, location) VALUES (?, ?)").run(name, location);
       const branchId = branchResult.lastInsertRowid;
       
       if (username && password) {
-        db.prepare("INSERT INTO users (username, password, role, branch_id) VALUES (?, ?, ?, ?)").run(
+        await db.prepare("INSERT INTO users (username, password, role, branch_id) VALUES (?, ?, ?, ?)").run(
           username, 
           password, 
           'branch_manager', 
@@ -731,8 +731,8 @@ app.post("/api/sales", async (req, res) => {
   }
 
   try {
-    const transaction = db.transaction(() => {
-      const saleResult = db.prepare(`
+    const transaction = db.transaction(async (db) => {
+      const saleResult = await db.prepare(`
         INSERT INTO sales (branch_id, user_id, customer_id, total_amount, tax, discount, payment_method) 
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(branch_id, user_id, customer_id, total_amount, tax, discount, payment_method);
@@ -740,12 +740,12 @@ app.post("/api/sales", async (req, res) => {
       const saleId = saleResult.lastInsertRowid;
       
       for (const item of items) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO sale_items (sale_id, product_id, quantity, price) 
           VALUES (?, ?, ?, ?)
         `).run(saleId, item.id, item.quantity, item.price);
         
-        db.prepare(`
+        await db.prepare(`
           UPDATE inventory SET quantity = quantity - ? 
           WHERE product_id = ? AND branch_id = ?
         `).run(item.quantity, item.id, branch_id);
@@ -845,8 +845,8 @@ app.post("/api/returns", async (req, res) => {
   const { sale_id, branch_id, user_id, total_return_amount, reason, items } = req.body;
   
   try {
-    const transaction = db.transaction(() => {
-      const returnResult = db.prepare(`
+    const transaction = db.transaction(async (db) => {
+      const returnResult = await db.prepare(`
         INSERT INTO returns (sale_id, branch_id, user_id, total_return_amount, reason) 
         VALUES (?, ?, ?, ?, ?)
       `).run(sale_id, branch_id, user_id, total_return_amount, reason);
@@ -854,12 +854,12 @@ app.post("/api/returns", async (req, res) => {
       const returnId = returnResult.lastInsertRowid;
       
       for (const item of items) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO return_items (return_id, product_id, quantity, price) 
           VALUES (?, ?, ?, ?)
         `).run(returnId, item.product_id, item.quantity, item.price);
         
-        db.prepare(`
+        await db.prepare(`
           UPDATE inventory SET quantity = quantity + ? 
           WHERE product_id = ? AND branch_id = ?
         `).run(item.quantity, item.product_id, branch_id);

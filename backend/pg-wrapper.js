@@ -43,4 +43,52 @@ export class PgWrapper {
   async exec(sql) {
     await this.pool.query(sql);
   }
+
+  // Transaction support
+  transaction(fn) {
+    return async (...args) => {
+      const client = await this.pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        // Create a temporary db object that uses this client
+        const transactionDb = {
+          prepare: (sql) => {
+            let paramCount = 0;
+            const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
+            
+            return {
+              get: async (...params) => {
+                const result = await client.query(pgSql, params);
+                return result.rows[0] || null;
+              },
+              all: async (...params) => {
+                const result = await client.query(pgSql, params);
+                return result.rows;
+              },
+              run: async (...params) => {
+                // For INSERT with RETURNING
+                const needsReturning = sql.trim().toUpperCase().startsWith('INSERT') && !sql.toUpperCase().includes('RETURNING');
+                const finalSql = needsReturning ? pgSql + ' RETURNING id' : pgSql;
+                const result = await client.query(finalSql, params);
+                return {
+                  changes: result.rowCount,
+                  lastInsertRowid: result.rows[0]?.id || null
+                };
+              }
+            };
+          }
+        };
+        
+        const result = await fn(transactionDb);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    };
+  }
 }
