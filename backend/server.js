@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import Database from "better-sqlite3";
+import SimpleDB from "./simple-db.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
@@ -25,13 +25,14 @@ try {
   console.log("ℹ️  Data directory already exists");
 }
 
-const dbPath = path.join(dataDir, "mkanak.db");
+const dbPath = path.join(dataDir, "mkanak.json");
 console.log("💾 Database path:", dbPath);
+
 
 let db;
 try {
-  db = new Database(dbPath);
-  console.log("✅ Database connected successfully");
+  db = new SimpleDB(dbPath);
+  console.log("✅ JSON Database connected successfully");
 } catch (error) {
   console.error("❌ Database connection failed:", error);
   process.exit(1);

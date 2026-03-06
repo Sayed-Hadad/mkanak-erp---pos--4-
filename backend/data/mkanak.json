@@ -1,0 +1,86 @@
+{
+  "branches": [
+    {
+      "id": 1,
+      "name": "Main Warehouse",
+      "is_main": 1
+    },
+    {
+      "id": 2,
+      "name": "Branch 1"
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password": "admin123",
+      "role": "super_admin",
+      "branch_id": 1
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "name": "General"
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "name": "كتاب تعلم البرمجة",
+      "barcode": "1001",
+      "category_id": 1,
+      "price": 150,
+      "cost": 100,
+      "min_stock": 5
+    },
+    {
+      "id": 2,
+      "name": "رواية الخيال",
+      "barcode": "1002",
+      "category_id": 1,
+      "price": 80,
+      "cost": 50,
+      "min_stock": 10
+    },
+    {
+      "id": 3,
+      "name": "دفتر ملاحظات",
+      "barcode": "1003",
+      "category_id": 1,
+      "price": 25,
+      "cost": 10,
+      "min_stock": 20
+    }
+  ],
+  "inventory": [
+    {
+      "id": 1,
+      "product_id": 1,
+      "branch_id": 1,
+      "quantity": 50
+    },
+    {
+      "id": 2,
+      "product_id": 2,
+      "branch_id": 1,
+      "quantity": 30
+    },
+    {
+      "id": 3,
+      "product_id": 3,
+      "branch_id": 1,
+      "quantity": 100
+    }
+  ],
+  "customers": [],
+  "sales": [],
+  "sale_items": [],
+  "transfers": [],
+  "transfer_items": [],
+  "returns": [],
+  "return_items": [],
+  "notifications": [],
+  "messages": []
+}
