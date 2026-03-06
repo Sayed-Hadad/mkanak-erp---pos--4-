@@ -1,0 +1,23 @@
+{
+  "name": "mkanak-erp-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mkanak ERP & POS System - Backend API Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["erp", "pos", "inventory", "express", "api"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

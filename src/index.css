@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cairo:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Cairo", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    direction: rtl;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans;
+  }
+}
+
+.glass {
+  @apply bg-white/80 backdrop-blur-md border border-white/20;
+}
+
+.card-shadow {
+  @apply shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-print, #receipt-print * {
+    visibility: visible;
+  }
+  #receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    padding: 5mm;
+    margin: 0;
+    direction: rtl;
+    font-family: 'Cairo', sans-serif;
+    background: white;
+    font-size: 12pt;
+  }
+  #receipt-print h2 {
+    font-size: 18pt;
+  }
+  #receipt-print table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #receipt-print th, #receipt-print td {
+    padding: 4pt 0;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
