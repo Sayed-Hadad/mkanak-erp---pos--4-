@@ -244,7 +244,12 @@ console.log("🛣️  Setting up API routes...");
 // API Routes
 app.get("/api/health", (req, res) => {
   console.log("❤️  Health check requested");
-  res.json({ status: "ok", message: "Mkanak ERP Server is running" });
+  const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
+  res.json({ 
+    status: "ok", 
+    message: "Mkanak ERP Server is running",
+    users: userCount.count 
+  });
 });
 
 // Seed endpoint - Only for initial setup
