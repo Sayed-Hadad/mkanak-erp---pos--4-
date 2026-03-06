@@ -321,11 +321,12 @@ app.get("/api/products", async (req, res) => {
     res.json(products);
   } else {
     const products = await db.prepare(`
-      SELECT p.*, c.name as category_name, SUM(COALESCE(i.quantity, 0)) as stock
+      SELECT p.id, p.name, p.barcode, p.category_id, p.price, p.cost, p.min_stock, 
+             c.name as category_name, SUM(COALESCE(i.quantity, 0)) as stock
       FROM products p 
       LEFT JOIN categories c ON p.category_id = c.id 
       LEFT JOIN inventory i ON p.id = i.product_id 
-      GROUP BY p.id
+      GROUP BY p.id, p.name, p.barcode, p.category_id, p.price, p.cost, p.min_stock, c.name
     `).all();
     res.json(products);
   }
