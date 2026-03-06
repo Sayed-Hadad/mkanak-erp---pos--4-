@@ -4,21 +4,38 @@ import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { mkdirSync } from "fs";
 
 dotenv.config();
+
+console.log("🚀 Starting Mkanak ERP Backend...");
+console.log("📍 Node version:", process.version);
+console.log("🌍 Environment:", process.env.NODE_ENV || 'development');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Create data directory if it doesn't exist
-import { mkdirSync } from "fs";
+const dataDir = path.join(__dirname, "data");
+console.log("📁 Creating data directory:", dataDir);
 try {
-  mkdirSync(path.join(__dirname, "data"), { recursive: true });
+  mkdirSync(dataDir, { recursive: true });
+  console.log("✅ Data directory ready");
 } catch (e) {
-  // Directory might already exist
+  console.log("ℹ️  Data directory already exists");
 }
 
-const db = new Database(path.join(__dirname, "data", "mkanak.db"));
+const dbPath = path.join(dataDir, "mkanak.db");
+console.log("💾 Database path:", dbPath);
+
+let db;
+try {
+  db = new Database(dbPath);
+  console.log("✅ Database connected successfully");
+} catch (error) {
+  console.error("❌ Database connection failed:", error);
+  process.exit(1);
+}
 
 // Initialize Database Schema
 db.exec(`
@@ -221,8 +238,11 @@ app.use(cors({
 
 app.use(express.json());
 
+console.log("🛣️  Setting up API routes...");
+
 // API Routes
 app.get("/api/health", (req, res) => {
+  console.log("❤️  Health check requested");
   res.json({ status: "ok", message: "Mkanak ERP Server is running" });
 });
 
@@ -875,19 +895,29 @@ app.get("/api/reports/stats", (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  console.error('⚠️  Server error:', err);
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
+console.log(`🚀 Attempting to start server on port ${PORT}...`);
+console.log(`🌍 Allowed origins: ${allowedOrigins.join(', ')}`);
+
 const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`✅ SERVER STARTED SUCCESSFULLY`);
+  console.log(`${'='.repeat(50)}`);
+  console.log(`📡 Port: ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Server URL: http://0.0.0.0:${PORT}`);
+  console.log(`💚 Health: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`${'='.repeat(50)}\n`);
 });
 
 // Handle server errors
 server.on('error', (error) => {
-  console.error('❌ Server error:', error);
+  console.error('\n❌ FATAL: Server failed to start');
+  console.error('Error:', error);
+  console.error('Port:', PORT);
   process.exit(1);
 });
 
