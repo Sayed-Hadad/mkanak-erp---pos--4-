@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
-import SimpleDB from "./simple-db.js";
+import pg from "pg";
+import { PgWrapper } from "./pg-wrapper.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-import { mkdirSync } from "fs";
 
 dotenv.config();
 
@@ -15,40 +15,38 @@ console.log("🌍 Environment:", process.env.NODE_ENV || 'development');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create data directory if it doesn't exist
-const dataDir = path.join(__dirname, "data");
-console.log("📁 Creating data directory:", dataDir);
-try {
-  mkdirSync(dataDir, { recursive: true });
-  console.log("✅ Data directory ready");
-} catch (e) {
-  console.log("ℹ️  Data directory already exists");
-}
+// PostgreSQL connection
+const { Pool } = pg;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-const dbPath = path.join(dataDir, "mkanak.json");
-console.log("💾 Database path:", dbPath);
-
-
+console.log("💾 Connecting to PostgreSQL...");
 let db;
 try {
-  db = new SimpleDB(dbPath);
-  console.log("✅ JSON Database connected successfully");
+  // Test connection
+  const client = await pool.connect();
+  console.log("✅ PostgreSQL connected successfully");
+  client.release();
+  // Wrap pool with SQLite-like API
+  db = new PgWrapper(pool);
 } catch (error) {
   console.error("❌ Database connection failed:", error);
   process.exit(1);
 }
 
 // Initialize Database Schema
-db.exec(`
+await db.exec(`
   CREATE TABLE IF NOT EXISTS branches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     location TEXT,
     is_main INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     role TEXT CHECK(role IN ('super_admin', 'branch_manager', 'cashier')) NOT NULL,
@@ -57,12 +55,12 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     barcode TEXT UNIQUE,
     category_id INTEGER,
@@ -73,7 +71,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS inventory (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     product_id INTEGER,
     branch_id INTEGER,
     quantity INTEGER DEFAULT 0,
@@ -83,7 +81,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     phone TEXT UNIQUE,
     points INTEGER DEFAULT 0,
@@ -91,7 +89,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS sales (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     branch_id INTEGER,
     user_id INTEGER,
     customer_id INTEGER,
@@ -106,7 +104,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS sale_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     sale_id INTEGER,
     product_id INTEGER,
     quantity INTEGER,
@@ -116,7 +114,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS transfers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     from_branch_id INTEGER,
     to_branch_id INTEGER,
     status TEXT DEFAULT 'pending',
@@ -127,7 +125,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS transfer_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     transfer_id INTEGER,
     product_id INTEGER,
     quantity INTEGER,
@@ -136,7 +134,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS returns (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     sale_id INTEGER,
     branch_id INTEGER,
     user_id INTEGER,
@@ -149,7 +147,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS return_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     return_id INTEGER,
     product_id INTEGER,
     quantity INTEGER,
@@ -159,7 +157,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     branch_id INTEGER,
     title TEXT NOT NULL,
     message TEXT NOT NULL,
@@ -170,12 +168,12 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     from_branch_id INTEGER,
     to_branch_id INTEGER,
     from_user_id INTEGER,
     message TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_read INTEGER DEFAULT 0,
     FOREIGN KEY(from_branch_id) REFERENCES branches(id),
     FOREIGN KEY(to_branch_id) REFERENCES branches(id),
@@ -183,32 +181,26 @@ db.exec(`
   );
 `);
 
-// Migration: Add type column to transfers if it doesn't exist
-try {
-  db.prepare("ALTER TABLE transfers ADD COLUMN type TEXT DEFAULT 'send'").run();
-  db.prepare("UPDATE transfers SET type = 'send' WHERE type IS NULL").run();
-} catch (e) {
-  // Column might already exist
-}
-
 // Seed initial data if empty
-const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
-if (userCount.count === 0) {
+const userCountResult = await db.prepare("SELECT COUNT(*) as count FROM users").get();
+if (parseInt(userCountResult.count) === 0) {
   console.log("Seeding initial data...");
-  const mainBranch = db.prepare("INSERT INTO branches (name, is_main) VALUES (?, ?)").run("Main Warehouse", 1);
-  db.prepare("INSERT INTO branches (name) VALUES (?)").run("Branch 1");
-  db.prepare("INSERT INTO users (username, password, role, branch_id) VALUES (?, ?, ?, ?)").run("admin", "admin123", "super_admin", mainBranch.lastInsertRowid);
-  db.prepare("INSERT INTO categories (name) VALUES (?)").run("General");
+  // Use RETURNING to get inserted IDs in PostgreSQL style
+  const mainBranchResult = await db.query("INSERT INTO branches (name, is_main) VALUES ($1, $2) RETURNING id", ["Main Warehouse", 1]);
+  const mainBranchId = mainBranchResult.rows[0].id;
+  await db.query("INSERT INTO branches (name) VALUES ($1)", ["Branch 1"]);
+  await db.query("INSERT INTO users (username, password, role, branch_id) VALUES ($1, $2, $3, $4)", ["admin", "admin123", "super_admin", mainBranchId]);
+  await db.query("INSERT INTO categories (name) VALUES ($1)", ["General"]);
   
   // Add some products
-  const p1 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("كتاب تعلم البرمجة", "1001", 1, 150, 100, 5);
-  const p2 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("رواية الخيال", "1002", 1, 80, 50, 10);
-  const p3 = db.prepare("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES (?, ?, ?, ?, ?, ?)").run("دفتر ملاحظات", "1003", 1, 25, 10, 20);
+  const p1Result = await db.query("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", ["كتاب تعلم البرمجة", "1001", 1, 150, 100, 5]);
+  const p2Result = await db.query("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", ["رواية الخيال", "1002", 1, 80, 50, 10]);
+  const p3Result = await db.query("INSERT INTO products (name, barcode, category_id, price, cost, min_stock) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", ["دفتر ملاحظات", "1003", 1, 25, 10, 20]);
 
   // Add inventory for main branch
-  db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p1.lastInsertRowid, 1, 50);
-  db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p2.lastInsertRowid, 1, 30);
-  db.prepare("INSERT INTO inventory (product_id, branch_id, quantity) VALUES (?, ?, ?)").run(p3.lastInsertRowid, 1, 100);
+  await db.query("INSERT INTO inventory (product_id, branch_id, quantity) VALUES ($1, $2, $3)", [p1Result.rows[0].id, 1, 50]);
+  await db.query("INSERT INTO inventory (product_id, branch_id, quantity) VALUES ($1, $2, $3)", [p2Result.rows[0].id, 1, 30]);
+  await db.query("INSERT INTO inventory (product_id, branch_id, quantity) VALUES ($1, $2, $3)", [p3Result.rows[0].id, 1, 100]);
 
   console.log("Seeding complete. Admin user: admin / admin123");
 }
@@ -285,9 +277,9 @@ app.post("/api/seed", (req, res) => {
   }
 });
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare("SELECT u.*, b.name as branch_name FROM users u LEFT JOIN branches b ON u.branch_id = b.id WHERE username = ? AND password = ?").get(username, password);
+  const user = await db.prepare("SELECT u.*, b.name as branch_name FROM users u LEFT JOIN branches b ON u.branch_id = b.id WHERE username = ? AND password = ?").get(username, password);
   if (user) {
     res.json({ user: { id: user.id, username: user.username, role: user.role, branch_id: user.branch_id, branch_name: user.branch_name } });
   } else {
